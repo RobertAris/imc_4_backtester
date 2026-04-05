@@ -177,3 +177,6 @@ pyrightconfig.json
 
 # Default output directory
 backtests/
+
+# macOS Finder metadata
+.DS_Store
