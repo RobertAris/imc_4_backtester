@@ -20,20 +20,22 @@ Those files live in [`prosperity4bt/resources/round0`](/Users/robertjahnke/Deskt
 ## Usage
 
 ```sh
-uv run prosperity4bt /path/to/trader.py 0
+.venv/bin/python -m prosperity4bt /path/to/trader.py 0
 ```
+
+Run commands from the repository root. Using `python -m prosperity4bt` avoids issues with a stale or missing `prosperity4bt` console script in the virtual environment.
 
 Examples:
 
 ```sh
 # Run both bundled tutorial days
-uv run prosperity4bt /path/to/trader.py 0
+.venv/bin/python -m prosperity4bt /path/to/trader.py 0
 
 # Run a specific tutorial day
-uv run prosperity4bt /path/to/trader.py 0--1
+.venv/bin/python -m prosperity4bt /path/to/trader.py 0--1
 
 # Use a custom Prosperity 4 data directory
-uv run prosperity4bt /path/to/trader.py 0 --data /path/to/data_root
+.venv/bin/python -m prosperity4bt /path/to/trader.py 0 --data /path/to/data_root
 ```
 
 ## Data Layout
