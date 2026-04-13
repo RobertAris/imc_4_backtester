@@ -24,6 +24,7 @@ Those files live in [`prosperity4bt/resources/round0`](/Users/robertjahnke/Deskt
 ```
 
 Run commands from the repository root. Using `python -m prosperity4bt` avoids issues with a stale or missing `prosperity4bt` console script in the virtual environment.
+By default, the backtester overwrites `backtests/darth_trader_visualizer.log` on each run. Use `--out /path/to/file.log` if you want a different output file.
 
 Examples:
 
