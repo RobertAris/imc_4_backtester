@@ -3,20 +3,20 @@
 This repository contains a Prosperity 4 oriented fork of the open source Prosperity 3 backtester. It has been adapted to:
 
 - expose a `prosperity4bt` CLI and Python package
-- use Prosperity 4 Round 1 data by default
+- use Prosperity 4 Round 2 data by default
 - emit `XIRECS` in generated trade logs
 - build Prosperity 4 `Observation` objects with `sunlight` and `humidity`
 - tolerate missing or evolving observation columns instead of crashing
 
 ## Included Data
 
-The bundled default dataset is the Prosperity 4 Round 1 data currently present in this workspace:
+The bundled default dataset is the Prosperity 4 Round 2 data currently present in this workspace:
 
-- `round 1 day -2`
-- `round 1 day -1`
-- `round 1 day 0`
+- `round 2 day -1`
+- `round 2 day 0`
+- `round 2 day 1`
 
-Those files live in [`prosperity4bt/resources/round1`](/Users/robertjahnke/Desktop/prosperity_4/IMC-Prosperity-4/imc_4_backtester/prosperity4bt/resources/round1).
+Those files live in [`prosperity4bt/resources/round2`](/Users/robertjahnke/Desktop/prosperity_4/IMC-Prosperity-4/imc_4_backtester/prosperity4bt/resources/round2).
 
 ## Usage
 
@@ -30,11 +30,11 @@ By default, the backtester overwrites `backtests/darth_trader_visualizer.log` on
 Examples:
 
 ```sh
-# Run all bundled Round 1 days
-.venv/bin/python -m prosperity4bt /path/to/trader.py 1
+# Run all bundled Round 2 days
+.venv/bin/python -m prosperity4bt /path/to/trader.py 2
 
-# Run a specific Round 1 day
-.venv/bin/python -m prosperity4bt /path/to/trader.py 1-0
+# Run a specific Round 2 day
+.venv/bin/python -m prosperity4bt /path/to/trader.py 2-0
 
 # Use a custom Prosperity 4 data directory
 .venv/bin/python -m prosperity4bt /path/to/trader.py 1 --data /path/to/data_root
@@ -46,13 +46,13 @@ Custom data passed through `--data` should follow this structure:
 
 ```text
 data_root/
-  round1/
-    prices_round_1_day_-2.csv
-    prices_round_1_day_-1.csv
-    prices_round_1_day_0.csv
-    trades_round_1_day_-2.csv
-    trades_round_1_day_-1.csv
-    trades_round_1_day_0.csv
+  round2/
+    prices_round_2_day_-1.csv
+    prices_round_2_day_0.csv
+    prices_round_2_day_1.csv
+    trades_round_2_day_-1.csv
+    trades_round_2_day_0.csv
+    trades_round_2_day_1.csv
 ```
 
 Observation files are optional. If present, place them next to the price/trade files as:
@@ -65,6 +65,6 @@ The parser accepts both comma and semicolon delimited observation files and unde
 
 ## Notes
 
-- Position limits are currently configured for the bundled Round 1 products only: `ASH_COATED_OSMIUM` and `INTARIAN_PEPPER_ROOT`, both at `80`.
+- Position limits are currently configured for the bundled Round 2 products only: `ASH_COATED_OSMIUM` and `INTARIAN_PEPPER_ROOT`, both at `80`.
 - When later Prosperity 4 rounds introduce more products, update `LIMITS` in [`prosperity4bt/data.py`](/Users/robertjahnke/Desktop/prosperity_4/IMC-Prosperity-4/imc_4_backtester/prosperity4bt/data.py).
 - The `--vis` option still opens the existing Prosperity 3 visualizer URL. The log format remains close to the original backtester, but visualizer compatibility may depend on your trader logs.
