@@ -8,7 +8,7 @@ from typing import Annotated, Any, Optional
 from typer import Argument, Option, Typer
 
 from prosperity4bt.data import has_day_data
-from prosperity4bt.file_reader import FileReader, FileSystemReader, PackageResourcesReader
+from prosperity4bt.file_reader import FileReader, FileSystemReader, ImcDataReader, PackageResourcesReader
 from prosperity4bt.models import BacktestResult, TradeMatchingMode
 from prosperity4bt.open import open_visualizer
 from prosperity4bt.runner import run_backtest
@@ -19,7 +19,14 @@ def parse_algorithm(algorithm: Path) -> Any:
     return import_module(algorithm.stem)
 
 
-def parse_data(data_root: Optional[Path]) -> FileReader:
+def parse_data(data_root: Optional[Path], imc_data_root: Optional[Path]) -> FileReader:
+    if data_root is not None and imc_data_root is not None:
+        print("Error: --data and --imc-data are mutually exclusive")
+        sys.exit(1)
+
+    if imc_data_root is not None:
+        return ImcDataReader(imc_data_root)
+
     if data_root is not None:
         return FileSystemReader(data_root)
     return PackageResourcesReader()
@@ -185,6 +192,7 @@ def cli(
     out: Annotated[Optional[Path], Option(help="File to save output log to (defaults to backtests/darth_trader_visualizer.log).", show_default=False, dir_okay=False, resolve_path=True)] = None,
     no_out: Annotated[bool, Option("--no-out", help="Skip saving output log.")] = False,
     data: Annotated[Optional[Path], Option(help="Path to data directory. Must look similar in structure to prosperity4bt/resources.", show_default=False, exists=True, file_okay=False, dir_okay=True, resolve_path=True)] = None,
+    imc_data: Annotated[Optional[Path], Option("--imc-data", help="Path to the IMC repo DATA directory. Supports IMC folder names like ROUND_2 and flat augmented price files like price_round_2_day_1_augmented.csv.", show_default=False, exists=True, file_okay=False, dir_okay=True, resolve_path=True)] = None,
     print_output: Annotated[bool, Option("--print", help="Print the trader's output to stdout while it's running.")] = False,
     match_trades: Annotated[TradeMatchingMode, Option(help="How to match orders against market trades. 'all' matches trades with prices equal to or worse than your quotes, 'worse' matches trades with prices worse than your quotes, 'none' does not match trades against orders at all.")] = TradeMatchingMode.all,
     no_progress: Annotated[bool, Option("--no-progress", help="Don't show progress bars.")] = False,
@@ -205,7 +213,7 @@ def cli(
         print(f"{algorithm} does not expose a Trader class")
         sys.exit(1)
 
-    file_reader = parse_data(data)
+    file_reader = parse_data(data, imc_data)
     parsed_days = parse_days(file_reader, days)
     output_file = parse_out(out, no_out)
 

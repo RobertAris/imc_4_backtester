@@ -62,7 +62,7 @@ def get_column_values(columns: list[str], indices: list[int]) -> list[int]:
         if value == "":
             break
 
-        values.append(int(value))
+        values.append(int(float(value)))
 
     return values
 
