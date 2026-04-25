@@ -106,5 +106,6 @@ class MarketTrade:
 
 class TradeMatchingMode(str, Enum):
     all = "all"
+    imc = "imc"
     worse = "worse"
     none = "none"

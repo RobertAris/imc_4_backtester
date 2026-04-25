@@ -148,10 +148,81 @@ def enforce_limits(
 
         if product_position + total_long > limit or product_position - total_short < -limit:
             sandbox_log_lines.append(f"Orders for product {product} exceeded limit of {limit} set")
-            orders.pop(product)
+            orders.pop(product, None)
 
     if len(sandbox_log_lines) > 0:
         sandbox_row.sandbox_log += "\n" + "\n".join(sandbox_log_lines)
+
+
+def record_trade(
+    state: TradingState,
+    data: BacktestData,
+    trade: Trade,
+) -> None:
+    if trade.buyer == "SUBMISSION":
+        state.position[trade.symbol] = state.position.get(trade.symbol, 0) + trade.quantity
+        data.profit_loss[trade.symbol] -= trade.price * trade.quantity
+    elif trade.seller == "SUBMISSION":
+        state.position[trade.symbol] = state.position.get(trade.symbol, 0) - trade.quantity
+        data.profit_loss[trade.symbol] += trade.price * trade.quantity
+
+
+def imc_trade_matches_order(
+    order: Order,
+    market_trade: MarketTrade,
+) -> bool:
+    if order.quantity > 0:
+        return market_trade.sell_quantity > 0 and market_trade.trade.price < order.price
+
+    return market_trade.buy_quantity > 0 and market_trade.trade.price > order.price
+
+
+def legacy_trade_matches_order(
+    order: Order,
+    market_trade: MarketTrade,
+    trade_matching_mode: TradeMatchingMode,
+) -> bool:
+    if order.quantity > 0:
+        return not (
+            market_trade.sell_quantity == 0
+            or market_trade.trade.price > order.price
+            or (market_trade.trade.price == order.price and trade_matching_mode == TradeMatchingMode.worse)
+        )
+
+    return not (
+        market_trade.buy_quantity == 0
+        or market_trade.trade.price < order.price
+        or (market_trade.trade.price == order.price and trade_matching_mode == TradeMatchingMode.worse)
+    )
+
+
+def market_trade_matches_order(
+    order: Order,
+    market_trade: MarketTrade,
+    trade_matching_mode: TradeMatchingMode,
+) -> bool:
+    if trade_matching_mode == TradeMatchingMode.imc:
+        return imc_trade_matches_order(order, market_trade)
+
+    return legacy_trade_matches_order(order, market_trade, trade_matching_mode)
+
+
+def consume_matching_market_trade(
+    market_trades: list[MarketTrade],
+    price: int,
+    quantity: int,
+) -> None:
+    remaining = quantity
+    for market_trade in market_trades:
+        if remaining == 0:
+            return
+        if market_trade.trade.price != price:
+            continue
+
+        volume = min(remaining, market_trade.buy_quantity, market_trade.sell_quantity)
+        market_trade.buy_quantity -= volume
+        market_trade.sell_quantity -= volume
+        remaining -= volume
 
 
 def match_buy_order(
@@ -170,8 +241,9 @@ def match_buy_order(
 
         trades.append(Trade(order.symbol, price, volume, "SUBMISSION", "", state.timestamp))
 
-        state.position[order.symbol] = state.position.get(order.symbol, 0) + volume
-        data.profit_loss[order.symbol] -= price * volume
+        record_trade(state, data, trades[-1])
+        if trade_matching_mode == TradeMatchingMode.imc:
+            consume_matching_market_trade(market_trades, price, volume)
 
         order_depth.sell_orders[price] += volume
         if order_depth.sell_orders[price] == 0:
@@ -185,11 +257,7 @@ def match_buy_order(
         return trades
 
     for market_trade in market_trades:
-        if (
-            market_trade.sell_quantity == 0
-            or market_trade.trade.price > order.price
-            or (market_trade.trade.price == order.price and trade_matching_mode == TradeMatchingMode.worse)
-        ):
+        if not market_trade_matches_order(order, market_trade, trade_matching_mode):
             continue
 
         volume = min(order.quantity, market_trade.sell_quantity)
@@ -198,8 +266,7 @@ def match_buy_order(
             Trade(order.symbol, order.price, volume, "SUBMISSION", market_trade.trade.seller, state.timestamp)
         )
 
-        state.position[order.symbol] = state.position.get(order.symbol, 0) + volume
-        data.profit_loss[order.symbol] -= order.price * volume
+        record_trade(state, data, trades[-1])
 
         market_trade.sell_quantity -= volume
 
@@ -226,8 +293,9 @@ def match_sell_order(
 
         trades.append(Trade(order.symbol, price, volume, "", "SUBMISSION", state.timestamp))
 
-        state.position[order.symbol] = state.position.get(order.symbol, 0) - volume
-        data.profit_loss[order.symbol] += price * volume
+        record_trade(state, data, trades[-1])
+        if trade_matching_mode == TradeMatchingMode.imc:
+            consume_matching_market_trade(market_trades, price, volume)
 
         order_depth.buy_orders[price] -= volume
         if order_depth.buy_orders[price] == 0:
@@ -241,19 +309,14 @@ def match_sell_order(
         return trades
 
     for market_trade in market_trades:
-        if (
-            market_trade.buy_quantity == 0
-            or market_trade.trade.price < order.price
-            or (market_trade.trade.price == order.price and trade_matching_mode == TradeMatchingMode.worse)
-        ):
+        if not market_trade_matches_order(order, market_trade, trade_matching_mode):
             continue
 
         volume = min(abs(order.quantity), market_trade.buy_quantity)
 
         trades.append(Trade(order.symbol, order.price, volume, market_trade.trade.buyer, "SUBMISSION", state.timestamp))
 
-        state.position[order.symbol] = state.position.get(order.symbol, 0) - volume
-        data.profit_loss[order.symbol] += order.price * volume
+        record_trade(state, data, trades[-1])
 
         market_trade.buy_quantity -= volume
 

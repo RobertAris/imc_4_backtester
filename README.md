@@ -1,70 +1,61 @@
-# IMC Prosperity 4 Backtester
+# IMC Prosperity 4 Round 3 Backtester
 
-This repository contains a Prosperity 4 oriented fork of the open source Prosperity 3 backtester. It has been adapted to:
+A small Prosperity 4 backtester trimmed for the Round 3 data in this workspace. It exposes the `prosperity4bt` CLI, builds Prosperity 4-compatible `TradingState` objects, writes visualizer logs, and enforces the Round 3 position limits.
 
-- expose a `prosperity4bt` CLI and Python package
-- use Prosperity 4 Round 2 data by default
-- emit `XIRECS` in generated trade logs
-- build Prosperity 4 `Observation` objects with `sunlight` and `humidity`
-- tolerate missing or evolving observation columns instead of crashing
+## Bundled Data
 
-## Included Data
+The default package data is Round 3 only:
 
-The bundled default dataset is the Prosperity 4 Round 2 data currently present in this workspace:
+- `round 3 day 0`
+- `round 3 day 1`
+- `round 3 day 2`
 
-- `round 2 day -1`
-- `round 2 day 0`
-- `round 2 day 1`
-
-Those files live in [`prosperity4bt/resources/round2`](/Users/robertjahnke/Desktop/prosperity_4/IMC-Prosperity-4/imc_4_backtester/prosperity4bt/resources/round2).
+The files live in `prosperity4bt/resources/round3`.
 
 ## Usage
 
-```sh
-.venv/bin/python -m prosperity4bt /path/to/trader.py 0
-```
-
-Run commands from the repository root. Using `python -m prosperity4bt` avoids issues with a stale or missing `prosperity4bt` console script in the virtual environment.
-By default, the backtester overwrites `backtests/darth_trader_visualizer.log` on each run. Use `--out /path/to/file.log` if you want a different output file.
-
-Examples:
+Run from this repository root:
 
 ```sh
-# Run all bundled Round 2 days
-.venv/bin/python -m prosperity4bt /path/to/trader.py 2
-
-# Run a specific Round 2 day
-.venv/bin/python -m prosperity4bt /path/to/trader.py 2-0
-
-# Use a custom Prosperity 4 data directory
-.venv/bin/python -m prosperity4bt /path/to/trader.py 1 --data /path/to/data_root
+.venv/bin/python -m prosperity4bt /Users/robertjahnke/Desktop/prosperity_4/IMC-Prosperity-4/trader_round3.py 3
 ```
 
-## Data Layout
+Useful variants:
 
-Custom data passed through `--data` should follow this structure:
+```sh
+# Run one day
+.venv/bin/python -m prosperity4bt /path/to/trader_round3.py 3-0
+
+# Use the IMC repo data directory directly
+.venv/bin/python -m prosperity4bt /path/to/trader_round3.py 3 --imc-data /Users/robertjahnke/Desktop/prosperity_4/IMC-Prosperity-4/data_root
+
+# Skip writing the visualizer log
+.venv/bin/python -m prosperity4bt /path/to/trader_round3.py 3 --no-out
+```
+
+By default, output is written to `backtests/darth_trader_visualizer.log`.
+
+## Round 3 Products
+
+Position limits are configured for:
+
+- `HYDROGEL_PACK`: 200
+- `VELVETFRUIT_EXTRACT`: 200
+- `VEV_4000`, `VEV_4500`, `VEV_5000`, `VEV_5100`, `VEV_5200`, `VEV_5300`, `VEV_5400`, `VEV_5500`, `VEV_6000`, `VEV_6500`: 300 each
+
+## Custom Data Layout
+
+Custom data passed with `--data` should look like:
 
 ```text
 data_root/
-  round2/
-    prices_round_2_day_-1.csv
-    prices_round_2_day_0.csv
-    prices_round_2_day_1.csv
-    trades_round_2_day_-1.csv
-    trades_round_2_day_0.csv
-    trades_round_2_day_1.csv
+  round3/
+    prices_round_3_day_0.csv
+    prices_round_3_day_1.csv
+    prices_round_3_day_2.csv
+    trades_round_3_day_0.csv
+    trades_round_3_day_1.csv
+    trades_round_3_day_2.csv
 ```
 
-Observation files are optional. If present, place them next to the price/trade files as:
-
-```text
-observations_round_<round>_day_<day>.csv
-```
-
-The parser accepts both comma and semicolon delimited observation files and understands either camelCase or snake_case field names for the core conversion fields.
-
-## Notes
-
-- Position limits are currently configured for the bundled Round 2 products only: `ASH_COATED_OSMIUM` and `INTARIAN_PEPPER_ROOT`, both at `80`.
-- When later Prosperity 4 rounds introduce more products, update `LIMITS` in [`prosperity4bt/data.py`](/Users/robertjahnke/Desktop/prosperity_4/IMC-Prosperity-4/imc_4_backtester/prosperity4bt/data.py).
-- The `--vis` option still opens the existing Prosperity 3 visualizer URL. The log format remains close to the original backtester, but visualizer compatibility may depend on your trader logs.
+`--imc-data` also understands the original IMC folder naming, including `ROUND_3`.
