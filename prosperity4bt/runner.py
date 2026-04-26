@@ -27,6 +27,10 @@ from prosperity4bt.models import (
 )
 
 QUOTE_CURRENCY = "XIRECS"
+# Denomination value the IMC submission server records in compressed
+# listings entries (the third element of [symbol, product, denomination]).
+# We use 1 so backtest logs match the format produced on the server.
+LISTING_DENOMINATION = 1
 
 
 def prepare_state(state: TradingState, data: BacktestData) -> None:
@@ -44,7 +48,7 @@ def prepare_state(state: TradingState, data: BacktestData) -> None:
             order_depth.sell_orders[price] = -volume
 
         state.order_depths[product] = order_depth
-        state.listings[product] = Listing(product, product, QUOTE_CURRENCY)
+        state.listings[product] = Listing(product, product, LISTING_DENOMINATION)
 
     observation_row = data.observations.get(state.timestamp)
     if observation_row is None:

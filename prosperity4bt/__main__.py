@@ -1,10 +1,12 @@
 import sys
+import uuid
 from collections import defaultdict
 from functools import reduce
 from importlib import import_module, metadata, reload
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
+import orjson
 from typer import Argument, Option, Typer
 
 from prosperity4bt.data import has_day_data
@@ -128,7 +130,11 @@ def merge_results(
     return BacktestResult(a.round_num, a.day_num, sandbox_logs, activity_logs, trades)
 
 
-def write_output(output_file: Path, merged_results: BacktestResult) -> None:
+def write_output_legacy(output_file: Path, merged_results: BacktestResult) -> None:
+    """Emit the original plain-text format with three labeled sections.
+
+    Kept for backward compatibility; selectable with --legacy-format.
+    """
     output_file.parent.mkdir(parents=True, exist_ok=True)
     with output_file.open("w+", encoding="utf-8") as file:
         file.write("Sandbox logs:\n")
@@ -145,6 +151,92 @@ def write_output(output_file: Path, merged_results: BacktestResult) -> None:
         file.write("[\n")
         file.write(",\n".join(map(str, merged_results.trades)))
         file.write("]")
+
+
+# Header for the activitiesLog string field.
+_ACTIVITIES_HEADER = (
+    "day;timestamp;product;"
+    "bid_price_1;bid_volume_1;bid_price_2;bid_volume_2;bid_price_3;bid_volume_3;"
+    "ask_price_1;ask_volume_1;ask_price_2;ask_volume_2;ask_price_3;ask_volume_3;"
+    "mid_price;profit_and_loss"
+)
+
+
+def _build_activities_log(merged_results: BacktestResult) -> str:
+    """Build the activitiesLog string: header + one row per ActivityLogRow,
+    joined by '\\n', with a trailing newline (matches submission-server output).
+    """
+    rows = [_ACTIVITIES_HEADER]
+    rows.extend(str(row) for row in merged_results.activity_logs)
+    # Target log ends activitiesLog with a trailing '\n' after the last row.
+    return "\n".join(rows) + "\n"
+
+
+def _build_logs_array(merged_results: BacktestResult) -> list[dict[str, Any]]:
+    """Build the `logs` array: one object per timestamp."""
+    return [
+        {
+            "sandboxLog": row.sandbox_log,
+            "lambdaLog": row.lambda_log,
+            "timestamp": row.timestamp,
+        }
+        for row in merged_results.sandbox_logs
+    ]
+
+
+def _build_trade_history(merged_results: BacktestResult) -> list[dict[str, Any]]:
+    """Build the `tradeHistory` array.
+
+    Matches the submission-server schema: price is a float, quantity is an int,
+    currency is the string "XIRECS", missing counterparty side is empty string.
+    """
+    history = []
+    for row in merged_results.trades:
+        trade = row.trade
+        history.append(
+            {
+                "timestamp": trade.timestamp,
+                "buyer": trade.buyer if trade.buyer is not None else "",
+                "seller": trade.seller if trade.seller is not None else "",
+                "symbol": trade.symbol,
+                "currency": "XIRECS",
+                # Server emits price as a float, qty as an int.
+                "price": float(trade.price),
+                "quantity": int(trade.quantity),
+            }
+        )
+    return history
+
+
+def write_output(output_file: Path, merged_results: BacktestResult) -> None:
+    """Emit the visualizer-compatible single-line JSON format.
+
+    Top-level schema:
+        {
+            "submissionId": "<uuid>",
+            "activitiesLog": "<csv string with newlines>",
+            "logs": [{"sandboxLog": ..., "lambdaLog": ..., "timestamp": ...}, ...],
+            "tradeHistory": [{...trade...}, ...]
+        }
+
+    This matches the format produced by the IMC submission server and is
+    the format the Prosperity visualizer consumes when given a backtest log.
+    """
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        # The server uses a real submission UUID; locally we generate a random
+        # one so each backtest run is uniquely identifiable.
+        "submissionId": str(uuid.uuid4()),
+        "activitiesLog": _build_activities_log(merged_results),
+        "logs": _build_logs_array(merged_results),
+        "tradeHistory": _build_trade_history(merged_results),
+    }
+
+    # Single-line JSON, no indentation, matching the server's output format.
+    # orjson is already a dependency (used by SandboxLogRow.__str__) and is
+    # fast enough for multi-million-row backtests.
+    output_file.write_bytes(orjson.dumps(payload))
 
 
 def print_overall_summary(results: list[BacktestResult]) -> None:
@@ -187,7 +279,7 @@ app = Typer(context_settings={"help_option_names": ["--help", "-h"]})
 def cli(
     algorithm: Annotated[Path, Argument(help="Path to the Python file containing the algorithm to backtest.", show_default=False, exists=True, file_okay=True, dir_okay=False, resolve_path=True)],
     days: Annotated[list[str], Argument(help="The days to backtest on. <round>-<day> for a single day, <round> for all days in a round.", show_default=False)],
-    merge_pnl: Annotated[bool, Option("--merge-pnl", help="Merge profit and loss across days.")] = False,
+    merge_pnl: Annotated[bool, Option("--merge-pnl", help="Merge profit and loss across days. Visualizer-compatible JSON output enables this automatically.")] = False,
     vis: Annotated[bool, Option("--vis", help="Open backtest results in the browser visualizer when done.")] = False,
     out: Annotated[Optional[Path], Option(help="File to save output log to (defaults to backtests/darth_trader_visualizer.log).", show_default=False, dir_okay=False, resolve_path=True)] = None,
     no_out: Annotated[bool, Option("--no-out", help="Skip saving output log.")] = False,
@@ -197,6 +289,7 @@ def cli(
     match_trades: Annotated[TradeMatchingMode, Option(help="How to match orders against market trades. 'imc' uses a stricter IMC-style approximation, 'all' matches trades with prices equal to or worse than your quotes, 'worse' matches trades with prices worse than your quotes, 'none' does not match trades against orders at all.")] = TradeMatchingMode.imc,
     no_progress: Annotated[bool, Option("--no-progress", help="Don't show progress bars.")] = False,
     original_timestamps: Annotated[bool, Option("--original-timestamps", help="Preserve original timestamps in output log rather than making them increase across days.")] = False,
+    legacy_format: Annotated[bool, Option("--legacy-format", help="Write the old plain-text three-section log format instead of the visualizer-compatible JSON format.")] = False,
     version: Annotated[bool, Option("--version", "-v", help="Show the program's version number and exit.", is_eager=True, callback=version_callback)] = False,
 ) -> None:  # fmt: skip
     if out is not None and no_out:
@@ -246,8 +339,12 @@ def cli(
         print_overall_summary(results)
 
     if output_file is not None:
-        merged_results = reduce(lambda a, b: merge_results(a, b, merge_pnl, not original_timestamps), results)
-        write_output(output_file, merged_results)
+        merge_output_pnl = merge_pnl or not legacy_format
+        merged_results = reduce(lambda a, b: merge_results(a, b, merge_output_pnl, not original_timestamps), results)
+        if legacy_format:
+            write_output_legacy(output_file, merged_results)
+        else:
+            write_output(output_file, merged_results)
         print(f"\nSuccessfully saved backtest results to {format_path(output_file)}")
 
     if vis and output_file is not None:
